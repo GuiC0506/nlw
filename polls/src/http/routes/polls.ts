@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest, FastifyInstance } from "fastify";
 import prisma from "../../lib/prisma";
+import { randomUUID } from "node:crypto"
 import { z } from "zod";
 
 export async function createPoll(app: FastifyInstance) {
@@ -48,6 +49,7 @@ export async function getPoll(app: FastifyInstance) {
             where: { id: pollId },
             include: {options: {
                 select: {
+                    id: true,
                     title: true
                 }
             }}
@@ -71,28 +73,16 @@ export async function voteOnPoll(app: FastifyInstance) {
         const { pollOptionId } = voteOnPollBody.parse(req.body);
         const { pollId } = voteOnPollParams.parse(req.params);
 
-        const poll = await prisma.poll.create({
-            data: {
-                title,
-                options: {createMany: {
-                    data: options.map(option => {
-                        return {
-                            title: option,
-                        }
-                    })
-                }}
-            }
-        });
-
-        /* prisma.pollOption.createMany({ */
-        /*     data: options.map(option => { */
-        /*         return { */
-        /*             title: option, */
-        /*             pollId: poll.id */
-        /*         } */
-        /*     }) */
-        /* }) */
-
-        return reply.status(201).send(poll);
-    })
-}
+        let { sessionId } = req.cookies;
+        if(!sessionId) {
+            sessionId = randomUUID();
+            reply.setCookie("sessionId", sessionId, {
+                path: "/",
+                maxAge: 60 * 60 * 24 * 30,
+                signed: true,
+                httpOnly: true, // only acessible via backend
+            });
+        }
+        return reply.status(200).send({sessionId});
+    }
+)}
