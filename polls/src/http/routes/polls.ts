@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest, FastifyInstance } from "fastify";
 import prisma from "../../lib/prisma";
 import { randomUUID } from "node:crypto"
 import { z } from "zod";
+import redis from "../../lib/redis";
 
 export async function createPoll(app: FastifyInstance) {
     app.post("/polls", async (req: FastifyRequest, reply:FastifyReply) => {
@@ -24,15 +25,6 @@ export async function createPoll(app: FastifyInstance) {
             }
         });
 
-        /* prisma.pollOption.createMany({ */
-        /*     data: options.map(option => { */
-        /*         return { */
-        /*             title: option, */
-        /*             pollId: poll.id */
-        /*         } */
-        /*     }) */
-        /* }) */
-
         return reply.status(201).send(poll);
     })
 }
@@ -50,11 +42,16 @@ export async function getPoll(app: FastifyInstance) {
             include: {options: {
                 select: {
                     id: true,
-                    title: true
+                    title: true,
                 }
             }}
         })
 
+        if(!poll) return reply.status(400).send({ message: "Poll not found"});
+
+        const pollRank = await redis.zrange(pollId, 0, -1, "WITHSCORES");
+        console.log(pollRank);
+;
         return reply.status(200).send(poll);
     })
 }
@@ -89,7 +86,8 @@ export async function voteOnPoll(app: FastifyInstance) {
                     where: {
                         id: userVotedPrevious.id
                         }
-                });               
+                }); 
+                await redis.zincrby(pollId, -1, userVotedPrevious.pollOptionId);
                 
             } else if(userVotedPrevious) {
                 return reply.status(400).send({ message: "You already voted on this poll"});
@@ -116,6 +114,8 @@ export async function voteOnPoll(app: FastifyInstance) {
                 pollOptionId
             }
         })
+
+        await redis.zincrby(pollId, 1, pollOptionId);
         return reply.status(200).send({sessionId});
     }
-)}
+)};
